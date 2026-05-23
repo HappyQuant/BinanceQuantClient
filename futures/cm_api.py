@@ -4,7 +4,8 @@ import time
 from enum import Enum
 from typing import Optional, Dict, Any
 
-from binance.cm_futures import CMFutures, market, account
+from binance import Client
+from binance import enums
 
 from envs import Envs
 from gvars import GVars
@@ -23,34 +24,44 @@ class CmFuturesClient(object):
     def __init__(self):
         Envs.initialize()
         GVars.initialize()
-        self.client: CMFutures = CMFutures(Envs.ApiKey, Envs.ApiSecret,
-                                           timeout=Envs.ClientTimeout, show_limit_usage=Envs.ClientShowLimit,
-                                           show_header=Envs.ClientShowHeader, proxies=Envs.ClientProxy)
+        self.client: Client = Client(
+            api_key=Envs.ApiKey,
+            api_secret=Envs.ApiSecret,
+            requests_params={
+                "timeout": Envs.ClientTimeout,
+                "proxies": Envs.ClientProxy
+            }
+        )
 
     def get_cm_futures_server_timestamp(self):
-        return market.time(self.client)
+        return self.client.futures_coin_time()
 
     def get_cm_futures_exchange_info(self):
-        return market.exchange_info(self.client)
+        return self.client.futures_coin_exchange_info()
 
     def get_cm_futures_ticker_price(self, symbol: str):
-        return market.ticker_price(self.client, symbol)
+        return self.client.futures_coin_symbol_ticker(symbol=symbol)
 
     def get_cm_futures_book_ticker(self, symbol: str):
-        return market.book_ticker(self.client, symbol)
+        return self.client.futures_coin_orderbook_ticker(symbol=symbol)
 
     def get_cm_futures_balance(self):
-        return account.balance(self.client)
+        return self.client.futures_coin_account_balance()
 
     def get_cm_futures_account(self):
-        return account.account(self.client)
+        return self.client.futures_coin_account()
 
     def get_cm_futures_funding_rate(self, symbol: str):
-        return market.funding_rate(self.client, symbol)
+        return self.client.futures_coin_funding_rate(symbol=symbol)
 
     def get_cm_futures_klines(self, symbol: str, interval: str, limit: int = 50,
                               end_time: int = int(time.time() * 1000)):
-        return market.klines(self.client, symbol, interval, limit=limit, endTime=end_time)
+        return self.client.futures_coin_klines(
+            symbol=symbol,
+            interval=interval,
+            limit=limit,
+            endTime=end_time
+        )
 
     def place_cm_futures_limit_order(self, symbol: str, side: str, price: float, quantity: float,
                                      timeInForce: CmTimeInForceEnum = CmTimeInForceEnum.GTC,
@@ -63,7 +74,12 @@ class CmFuturesClient(object):
 
         if newClientOrderId is not None:
             params["newClientOrderId"] = newClientOrderId
-        return account.new_order(self.client, symbol, side, "LIMIT", **params)
+        return self.client.futures_coin_create_order(
+            symbol=symbol,
+            side=side,
+            type=enums.FUTURE_ORDER_TYPE_LIMIT,
+            **params
+        )
 
     def place_cm_futures_market_order(self, symbol: str, side: str, quantity: float,
                                       newClientOrderId: Optional[str] = None):
@@ -73,10 +89,15 @@ class CmFuturesClient(object):
 
         if newClientOrderId is not None:
             params["newClientOrderId"] = newClientOrderId
-        return account.new_order(self.client, symbol, side, "MARKET", **params)
+        return self.client.futures_coin_create_order(
+            symbol=symbol,
+            side=side,
+            type=enums.FUTURE_ORDER_TYPE_MARKET,
+            **params
+        )
 
     def get_cm_futures_order(self, symbol: str, orderId: Optional[int] = None, origClientOrderId: Optional[str] = None):
-        params: Dict[str, Any] = dict()
+        params: Dict[str, Any] = {"symbol": symbol}
         if orderId is not None:
             params["orderId"] = orderId
         elif origClientOrderId is not None:
@@ -84,11 +105,11 @@ class CmFuturesClient(object):
         else:
             return None
 
-        return account.query_order(self.client, symbol, **params)
+        return self.client.futures_coin_get_order(**params)
 
     def cancel_cm_futures_order(self, symbol: str, orderId: Optional[int] = None,
                                 origClientOrderId: Optional[str] = None):
-        params: Dict[str, Any] = dict()
+        params: Dict[str, Any] = {"symbol": symbol}
         if orderId is not None:
             params["orderId"] = orderId
         elif origClientOrderId is not None:
@@ -96,14 +117,14 @@ class CmFuturesClient(object):
         else:
             return None
 
-        return account.cancel_order(self.client, symbol, **params)
+        return self.client.futures_coin_cancel_order(**params)
 
     def get_cm_futures_position_risk(self, symbol: Optional[str] = None):
-        params: Dict[str, Any] = dict()
+        params: Dict[str, Any] = {}
         if symbol is not None:
             params["symbol"] = symbol
 
-        return account.get_position_risk(self.client, **params)
+        return self.client.futures_coin_position_information(**params)
 
 
 if __name__ == "__main__":

@@ -28,13 +28,17 @@ class AsyncSpotClient(object):
             async with self._lock:
                 if self._client is None:
                     Envs.initialize()
+                    proxy = Envs.ClientProxy.get("https") if Envs.ClientProxy else None
+                    session_params = {}
+                    if proxy:
+                        session_params["proxy"] = proxy
                     self._client = await AsyncClient.create(
                         api_key=Envs.ApiKey,
                         api_secret=Envs.ApiSecret,
                         requests_params={
                             "timeout": Envs.ClientTimeout,
-                            "proxies": Envs.ClientProxy
-                        }
+                        },
+                        session_params=session_params
                     )
         return self._client
 

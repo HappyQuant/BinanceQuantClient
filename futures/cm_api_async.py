@@ -6,7 +6,8 @@ from enum import Enum
 from typing import Optional, Dict, Any
 import time
 
-from binance.cm_futures import AsyncCMFutures
+from binance import AsyncClient
+from binance import enums
 
 from envs import Envs
 
@@ -19,64 +20,72 @@ class CmTimeInForceEnum(Enum):
 
 class AsyncCmFuturesClient(object):
     def __init__(self):
-        self._client: Optional[AsyncCMFutures] = None
+        self._client: Optional[AsyncClient] = None
         self._lock = asyncio.Lock()
 
-    async def _get_client(self) -> AsyncCMFutures:
+    async def _get_client(self) -> AsyncClient:
         if self._client is None:
             async with self._lock:
                 if self._client is None:
                     Envs.initialize()
-                    self._client = AsyncCMFutures(
-                        key=Envs.ApiKey,
-                        secret=Envs.ApiSecret,
+                    proxy = Envs.ClientProxy.get("https") if Envs.ClientProxy else None
+                    session_params = {}
+                    if proxy:
+                        session_params["proxy"] = proxy
+                    self._client = await AsyncClient.create(
+                        api_key=Envs.ApiKey,
+                        api_secret=Envs.ApiSecret,
                         requests_params={
                             "timeout": Envs.ClientTimeout,
-                            "proxies": Envs.ClientProxy
-                        }
+                        },
+                        session_params=session_params
                     )
         return self._client
 
     async def close(self):
         if self._client is not None:
-            await self._client.close_session()
+            await self._client.close_connection()
             self._client = None
 
     async def get_cm_futures_server_timestamp(self):
         client = await self._get_client()
-        return await client.time()
+        return await client.futures_coin_time()
 
     async def get_cm_futures_exchange_info(self):
         client = await self._get_client()
-        return await client.exchange_info()
+        return await client.futures_coin_exchange_info()
 
     async def get_cm_futures_ticker_price(self, symbol: str):
         client = await self._get_client()
-        return await client.ticker_price(symbol=symbol)
+        return await client.futures_coin_symbol_ticker(symbol=symbol)
 
     async def get_cm_futures_book_ticker(self, symbol: str):
         client = await self._get_client()
-        return await client.book_ticker(symbol=symbol)
+        return await client.futures_coin_orderbook_ticker(symbol=symbol)
 
     async def get_cm_futures_balance(self):
         client = await self._get_client()
-        return await client.balance()
+        return await client.futures_coin_account_balance()
 
     async def get_cm_futures_account(self):
         client = await self._get_client()
-        return await client.account()
+        return await client.futures_coin_account()
 
     async def get_cm_futures_funding_rate(self, symbol: str):
         client = await self._get_client()
-        return await client.funding_rate(symbol=symbol)
+        return await client.futures_coin_funding_rate(symbol=symbol)
 
     async def get_cm_futures_klines(self, symbol: str, interval: str,
                                     limit: int = 50, end_time: Optional[int] = None):
         client = await self._get_client()
         if end_time is None:
             end_time = int(time.time() * 1000)
-        params = {"symbol": symbol, "interval": interval, "limit": limit, "endTime": end_time}
-        return await client.klines(**params)
+        return await client.futures_coin_klines(
+            symbol=symbol,
+            interval=interval,
+            limit=limit,
+            endTime=end_time
+        )
 
     async def place_cm_futures_limit_order(
         self, symbol: str, side: str, price: float, quantity: float,
@@ -88,7 +97,7 @@ class AsyncCmFuturesClient(object):
         params: Dict[str, Any] = {
             "symbol": symbol,
             "side": side,
-            "type": "LIMIT",
+            "type": enums.FUTURE_ORDER_TYPE_LIMIT,
             "timeInForce": timeInForce.value,
             "price": str(price),
             "quantity": str(quantity),
@@ -97,7 +106,7 @@ class AsyncCmFuturesClient(object):
         if newClientOrderId is not None:
             params["newClientOrderId"] = newClientOrderId
 
-        return await client.new_order(**params)
+        return await client.futures_coin_create_order(**params)
 
     async def place_cm_futures_market_order(
         self, symbol: str, side: str, quantity: float,
@@ -108,14 +117,14 @@ class AsyncCmFuturesClient(object):
         params: Dict[str, Any] = {
             "symbol": symbol,
             "side": side,
-            "type": "MARKET",
+            "type": enums.FUTURE_ORDER_TYPE_MARKET,
             "quantity": str(quantity),
         }
 
         if newClientOrderId is not None:
             params["newClientOrderId"] = newClientOrderId
 
-        return await client.new_order(**params)
+        return await client.futures_coin_create_order(**params)
 
     async def get_cm_futures_order(
         self, symbol: str, orderId: Optional[int] = None,
@@ -131,7 +140,7 @@ class AsyncCmFuturesClient(object):
         else:
             raise ValueError("Either orderId or origClientOrderId must be provided")
 
-        return await client.query_order(**params)
+        return await client.futures_coin_get_order(**params)
 
     async def cancel_cm_futures_order(
         self, symbol: str, orderId: Optional[int] = None,
@@ -147,7 +156,7 @@ class AsyncCmFuturesClient(object):
         else:
             raise ValueError("Either orderId or origClientOrderId must be provided")
 
-        return await client.cancel_order(**params)
+        return await client.futures_coin_cancel_order(**params)
 
     async def get_cm_futures_position_risk(self, symbol: Optional[str] = None):
         client = await self._get_client()
@@ -156,7 +165,7 @@ class AsyncCmFuturesClient(object):
         if symbol is not None:
             params["symbol"] = symbol
 
-        return await client.get_position_risk(**params)
+        return await client.futures_coin_position_information(**params)
 
     async def __aenter__(self):
         await self._get_client()

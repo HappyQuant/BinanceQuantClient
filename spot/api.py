@@ -4,7 +4,8 @@ import time
 from enum import Enum
 from typing import Optional, Dict, Any
 
-from binance.spot import Spot, _market, _trade, _wallet
+from binance import Client
+from binance import enums
 
 from envs import Envs
 from gvars import GVars
@@ -23,37 +24,48 @@ class SpotClient(object):
     def __init__(self):
         Envs.initialize()
         GVars.initialize()
-        self.client: Spot = Spot(Envs.ApiKey, Envs.ApiSecret,
-                                 timeout=Envs.ClientTimeout, show_limit_usage=Envs.ClientShowLimit,
-                                 show_header=Envs.ClientShowHeader, proxies=Envs.ClientProxy)
+        self.client: Client = Client(
+            api_key=Envs.ApiKey,
+            api_secret=Envs.ApiSecret,
+            requests_params={
+                "timeout": Envs.ClientTimeout,
+                "proxies": Envs.ClientProxy
+            }
+        )
 
     def get_spot_server_timestamp(self):
-        return _market.time(self.client)
+        return self.client.get_server_time()
 
     def get_spot_exchange_info(self):
-        return _market.exchange_info(self.client)
+        return self.client.get_exchange_info()
 
     def get_spot_trade_fee(self):
-        return _wallet.trade_fee(self.client)
+        return self.client.get_trade_fee()
 
     def get_spot_ticker_price(self, symbol: str):
-        return _market.ticker_price(self.client, symbol)
+        return self.client.get_symbol_ticker(symbol=symbol)
 
     def get_spot_balance(self):
-        return _wallet.balance(self.client)
+        return self.client.get_account()
 
     def get_spot_account(self):
-        return _trade.account(self.client)
+        return self.client.get_account()
 
     def get_spot_klines(self, symbol: str, interval: str, limit: int = 50, end_time: int = int(time.time() * 1000)):
-        return _market.klines(self.client, symbol, interval, limit=limit, endTime=end_time)
+        return self.client.get_klines(
+            symbol=symbol,
+            interval=interval,
+            limit=limit,
+            endTime=end_time
+        )
 
     def place_limit_order(self, symbol: str, side: str, price: float, quantity: Optional[float] = None,
                           quoteOrderQty: Optional[float] = None, timeInForce: TimeInForceEnum = TimeInForceEnum.GTC,
                           newClientOrderId: Optional[str] = None):
         params: Dict[str, Any] = {
-            "timeInForce": timeInForce.value,
+            "type": enums.ORDER_TYPE_LIMIT,
             "price": price,
+            "timeInForce": timeInForce.value,
         }
         if quantity is not None:
             params["quantity"] = quantity
@@ -64,12 +76,18 @@ class SpotClient(object):
 
         if newClientOrderId is not None:
             params["newClientOrderId"] = newClientOrderId
-        return _trade.new_order(self.client, symbol, side, "LIMIT", **params)
+        return self.client.create_order(
+            symbol=symbol,
+            side=side,
+            **params
+        )
 
     def place_market_order(self, symbol: str, side: str, quantity: Optional[float] = None,
                            quoteOrderQty: Optional[float] = None,
                            newClientOrderId: Optional[str] = None):
-        params: Dict[str, Any] = dict()
+        params: Dict[str, Any] = {
+            "type": enums.ORDER_TYPE_MARKET,
+        }
         if quantity is not None:
             params["quantity"] = quantity
         elif quoteOrderQty is not None:
@@ -79,10 +97,14 @@ class SpotClient(object):
 
         if newClientOrderId is not None:
             params["newClientOrderId"] = newClientOrderId
-        return _trade.new_order(self.client, symbol, side, "MARKET", **params)
+        return self.client.create_order(
+            symbol=symbol,
+            side=side,
+            **params
+        )
 
     def get_order(self, symbol: str, orderId: Optional[int] = None, origClientOrderId: Optional[str] = None):
-        params: Dict[str, Any] = dict()
+        params: Dict[str, Any] = {"symbol": symbol}
         if orderId is not None:
             params["orderId"] = orderId
         elif origClientOrderId is not None:
@@ -90,10 +112,10 @@ class SpotClient(object):
         else:
             return None
 
-        return _trade.get_order(self.client, symbol, **params)
+        return self.client.get_order(**params)
 
     def cancel_order(self, symbol: str, orderId: Optional[int] = None, origClientOrderId: Optional[str] = None):
-        params: Dict[str, Any] = dict()
+        params: Dict[str, Any] = {"symbol": symbol}
         if orderId is not None:
             params["orderId"] = orderId
         elif origClientOrderId is not None:
@@ -101,7 +123,7 @@ class SpotClient(object):
         else:
             return None
 
-        return _trade.cancel_order(self.client, symbol, **params)
+        return self.client.cancel_order(**params)
 
 
 if __name__ == "__main__":
