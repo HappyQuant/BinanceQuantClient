@@ -1,0 +1,18 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+mypy = "0.910"
+python-dotenv = "0.20.0"
+requests = "2.28.1"
+binance-connector = "3.7.0"
+binance-futures-connector = "4.0.0"
+python-binance = "1.0.19"
+redis = "5.0.1"
+
+[dev-packages]
+
+[requires]
+python_version = "3"
